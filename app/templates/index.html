@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple Document Fill</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 2rem; }
+    .card { max-width: 640px; margin: auto; padding: 1.5rem; border: 1px solid #e5e7eb; border-radius: 12px; }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; }
+    input[type="text"], input[type="email"] { width: 100%; padding: 0.6rem; border: 1px solid #d1d5db; border-radius: 8px; }
+    input[type="file"] { margin-top: 0.5rem; }
+    button { margin-top: 1rem; padding: 0.75rem 1rem; border: 0; border-radius: 10px; background: black; color: white; font-weight: 600; cursor: pointer; }
+    .hint { color: #6b7280; font-size: 0.9rem; }
+    .flash { background: #fef3c7; color: #92400e; padding: 0.5rem; border-radius: 8px; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    <h1>Simple Document Fill</h1>
+    <p class="hint">Upload a .zip containing PDFs. Enter values to fill wherever the document has label anchors (e.g., "name:", "email:", etc.).</p>
+    <form method="post" action="/process" enctype="multipart/form-data">
+      <label>Name</label>
+      <input type="text" name="name" placeholder="John Doe">
+
+      <label>Email</label>
+      <input type="email" name="email" placeholder="john@example.com">
+
+      <label>Phone</label>
+      <input type="text" name="phone" placeholder="555-123-4567">
+
+      <label>Address</label>
+      <input type="text" name="address" placeholder="123 Main St, Springfield">
+
+      <label>EIN / Tax ID</label>
+      <input type="text" name="ein" placeholder="12-3456789">
+
+      <label>ZIP with PDFs</label>
+      <input type="file" name="zipfile" accept=".zip" required>
+
+      <button type="submit">Process & Download</button>
+    </form>
+    <p class="hint">If PDFs are fillable (AcroForms), fields are filled. Otherwise we overlay near matching labels.</p>
+  </div>
+</body>
+</html>
