@@ -1,0 +1,62 @@
+fields:
+  - key: name
+    acroform_names:
+      - "name"
+      - "full_name"
+      - "legal_name"
+      - "business_name"
+      - "company_name"
+    write:
+      anchor_label: name
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: email
+    acroform_names:
+      - "email"
+      - "email_address"
+      - "e_mail"
+    write:
+      anchor_label: email
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: phone
+    acroform_names:
+      - "phone"
+      - "telephone"
+      - "phone_number"
+      - "mobile"
+      - "cell"
+    write:
+      anchor_label: phone
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: address
+    acroform_names:
+      - "address"
+      - "street_address"
+      - "mailing_address"
+      - "business_address"
+    write:
+      anchor_label: address
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: ein
+    acroform_names:
+      - "ein"
+      - "employer_identification_number"
+      - "tax_id"
+      - "tax_identification_number"
+    write:
+      anchor_label: ein
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11

@@ -1,0 +1,29 @@
+labels:
+  name:
+    - "name:"
+    - "full name:"
+    - "legal name:"
+    - "business name:"
+    - "company name:"
+  email:
+    - "email:"
+    - "e-mail:"
+    - "email address:"
+    - "e-mail address:"
+  phone:
+    - "phone:"
+    - "telephone:"
+    - "phone number:"
+    - "telephone number:"
+    - "mobile:"
+    - "cell:"
+  address:
+    - "address:"
+    - "street address:"
+    - "mailing address:"
+    - "business address:"
+  ein:
+    - "ein:"
+    - "employer identification number:"
+    - "tax id:"
+    - "tax identification number:"
