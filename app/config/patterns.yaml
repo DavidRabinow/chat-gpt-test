@@ -5,6 +5,8 @@ labels:
     - "legal name:"
     - "business name:"
     - "company name:"
+    - "name(s):"
+    - "names:"
   email:
     - "email:"
     - "e-mail:"
@@ -17,13 +19,25 @@ labels:
     - "telephone number:"
     - "mobile:"
     - "cell:"
+    - "daytime phone:"
   address:
     - "address:"
     - "street address:"
     - "mailing address:"
     - "business address:"
+    - "current address:"
   ein:
     - "ein:"
     - "employer identification number:"
     - "tax id:"
     - "tax identification number:"
+  dob:
+    - "dob:"
+    - "date of birth:"
+    - "birthdate:"
+    - "birth date:"
+  ssn:
+    - "ssn:"
+    - "social security:"
+    - "social security number:"
+    - "federal tax identification number:"

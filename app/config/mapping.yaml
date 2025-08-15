@@ -6,6 +6,7 @@ fields:
       - "legal_name"
       - "business_name"
       - "company_name"
+      - "names"
     write:
       anchor_label: name
       offset:
@@ -17,6 +18,7 @@ fields:
       - "email"
       - "email_address"
       - "e_mail"
+      - "e_mail_address"
     write:
       anchor_label: email
       offset:
@@ -30,6 +32,7 @@ fields:
       - "phone_number"
       - "mobile"
       - "cell"
+      - "daytime_phone"
     write:
       anchor_label: phone
       offset:
@@ -42,6 +45,7 @@ fields:
       - "street_address"
       - "mailing_address"
       - "business_address"
+      - "current_address"
     write:
       anchor_label: address
       offset:
@@ -56,6 +60,30 @@ fields:
       - "tax_identification_number"
     write:
       anchor_label: ein
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: dob
+    acroform_names:
+      - "dob"
+      - "date_of_birth"
+      - "birthdate"
+      - "birth_date"
+    write:
+      anchor_label: dob
+      offset:
+        dx: 10
+        dy: 0
+      font_size: 11
+  - key: ssn
+    acroform_names:
+      - "ssn"
+      - "social_security"
+      - "social_security_number"
+      - "federal_tax_identification_number"
+    write:
+      anchor_label: ssn
       offset:
         dx: 10
         dy: 0

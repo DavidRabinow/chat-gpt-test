@@ -1,4 +1,3 @@
-
 import io
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 from processor import process_zip
@@ -17,6 +16,8 @@ def process():
     phone = request.form.get("phone","").strip()
     address = request.form.get("address","").strip()
     ein = request.form.get("ein","").strip()
+    dob = request.form.get("dob","").strip()
+    ssn = request.form.get("ssn","").strip()
 
     f = request.files.get("zipfile")
     if not f or not f.filename.lower().endswith(".zip"):
@@ -24,7 +25,15 @@ def process():
         return redirect(url_for("index"))
 
     zip_bytes = f.read()
-    values = {"name": name, "email": email, "phone": phone, "address": address, "ein": ein}
+    values = {
+        "name": name, 
+        "email": email, 
+        "phone": phone, 
+        "address": address, 
+        "ein": ein,
+        "dob": dob,
+        "ssn": ssn
+    }
 
     out_zip = process_zip(zip_bytes, values)
 
