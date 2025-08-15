@@ -14,7 +14,7 @@ MAPPING = yaml.safe_load(open(ROOT / 'config' / 'mapping.yaml', 'r', encoding='u
 FIELD_MAP = {
     "name": ["name", "names", "name(s)", "full name", "legal name", "business name", "company name"],
     "email": ["email", "email address", "e-mail", "e-mail address"],
-    "address": ["address", "street address", "mailing address", "business address", "current address"],
+    "address": ["address", "street address", "mailing address", "business address", "current address", "physical address"],
     "phone": ["phone", "telephone", "phone number", "telephone number", "mobile", "cell", "daytime phone"],
     "ein": ["ein", "employer identification number", "tax id", "tax identification number"],
     "dob": ["dob", "date of birth", "birthdate", "birth date"],
@@ -170,13 +170,37 @@ def classify_field_type(label_text: str) -> Tuple[str, float]:
     best_match = None
     best_score = 0
     
+    # Priority scoring for more specific matches
     for field_type, keywords in FIELD_MAP.items():
         for keyword in keywords:
             # Try exact match first
             if label_clean == keyword:
                 return field_type, 100.0
             
-            # Try fuzzy matching
+                        # Check for substring matches (more specific)
+            if keyword in label_clean or label_clean in keyword:
+                # Special case: if both "email" and "address" appear, prioritize email
+                if "email" in label_clean and "address" in label_clean:
+                    logger.info(f"Field classification: '{label_text}' contains both 'email' and 'address', prioritizing email")
+                    return "email", 95.0
+                
+                # Give higher priority to more specific matches
+                if field_type == "email" and "email" in label_clean:
+                    return field_type, 95.0
+                elif field_type == "address" and "address" in label_clean and "email" not in label_clean:
+                    return field_type, 90.0
+                elif field_type == "phone" and any(phone_word in label_clean for phone_word in ["phone", "telephone", "mobile", "cell"]):
+                    return field_type, 90.0
+                elif field_type == "ssn" and any(ssn_word in label_clean for ssn_word in ["ssn", "social security"]):
+                    return field_type, 90.0
+                elif field_type == "ein" and any(ein_word in label_clean for ein_word in ["ein", "employer identification", "tax id"]):
+                    return field_type, 90.0
+                elif field_type == "dob" and any(dob_word in label_clean for dob_word in ["dob", "date of birth", "birth"]):
+                    return field_type, 90.0
+                elif field_type == "name" and "name" in label_clean:
+                    return field_type, 85.0
+            
+            # Try fuzzy matching as fallback
             score = fuzz.ratio(label_clean, keyword)
             if score > best_score:
                 best_score = score
@@ -195,27 +219,33 @@ def is_likely_field_label(word_info: Tuple, page_width: float, page_height: floa
     field_indicators = [':', '.', '?']
     has_field_indicator = any(text_lower.endswith(indicator) for indicator in field_indicators)
     
-    # Check position - field labels are often in top-left areas
+    # Check if text contains field-related keywords
+    field_keywords = ['name', 'email', 'address', 'phone', 'telephone', 'dob', 'birth', 'ssn', 'ein', 'fein', 'daytime']
+    has_field_keywords = any(keyword in text_lower for keyword in field_keywords)
+    
+    # Check position - field labels are often in top-left areas, but can be anywhere
     is_top_left = y0 < page_height * 0.3  # Top 30% of page
     
     # Check if text is relatively short (typical for labels)
-    is_short_text = len(text.strip()) < 30
+    is_short_text = len(text.strip()) < 50  # Increased limit for compound labels
     
     # Check if text is isolated (not part of a paragraph)
     word_width = x1 - x0
     word_height = y1 - y0
-    is_isolated = word_width < page_width * 0.2  # Not spanning most of the page
+    is_isolated = word_width < page_width * 0.3  # Increased limit for longer labels
     
     # Calculate confidence score
     confidence = 0
     if has_field_indicator:
         confidence += 30
+    if has_field_keywords:
+        confidence += 40  # Higher weight for field keywords
     if is_top_left:
-        confidence += 20
+        confidence += 15
     if is_short_text:
-        confidence += 25
+        confidence += 20
     if is_isolated:
-        confidence += 25
+        confidence += 20
     
     return confidence >= MIN_FIELD_CONFIDENCE
 
@@ -236,15 +266,17 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
     search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
     text_in_area = page.get_text("text", clip=search_rect).strip()
     
-    # Check if area is mostly blank
-    is_blank = len(text_in_area) < 10  # Allow some minor text
+    # Check if area is mostly blank or contains placeholder text
+    is_blank = len(text_in_area) < 50  # Allow more text, including placeholders
     
     if is_blank:
-        # Calculate placement position
+        # Calculate placement position with better field boundaries
         placement_x = label_x1 + 10  # 10 points after label
-        placement_y = label_y0 + (label_y1 - label_y0) * 0.8  # Align with label baseline
+        # Create a proper field area that's slightly taller than the label
+        field_height = max(label_y1 - label_y0, 12)  # Minimum 12 points height
+        placement_y = label_y0 - 2  # Start slightly above label baseline
         placement_width = search_x1 - placement_x
-        placement_height = label_y1 - label_y0
+        placement_height = field_height + 4  # Add some padding
         
         placement_bbox = [placement_x, placement_y, placement_x + placement_width, placement_y + placement_height]
         logger.debug(f"Blank space detected after label at {label_bbox}, placement at {placement_bbox}")
@@ -272,6 +304,10 @@ def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> 
         
         for word_info in words:
             x0, y0, x1, y1, text, *_ = word_info
+            
+            # Log all potential field labels for debugging
+            if any(keyword in text.lower() for keyword in ['email', 'phone', 'address', 'name', 'dob', 'ssn', 'ein']):
+                logger.debug(f"Potential field label found: '{text}' at position ({x0:.1f}, {y0:.1f})")
             
             # Skip if not likely a field label
             if not is_likely_field_label(word_info, page_width, page_height):
@@ -339,16 +375,18 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         if entry:
             dx = entry['write'].get('offset', {}).get('dx', 10)
             dy = entry['write'].get('offset', {}).get('dy', 0)
-            size = entry['write'].get('font_size', 11)
+            size = entry['write'].get('font_size', 10)  # Slightly smaller font for better fit
         else:
-            dx, dy, size = 10, 0, 11
+            dx, dy, size = 10, 0, 10  # Default to smaller font
         
         page = doc[best_match['page']]
         placement_bbox = best_match['placement_bbox']
         
-        # Calculate text position within the placement area
+        # Calculate text position within the placement area with better alignment
         x = placement_bbox[0] + dx
-        y = placement_bbox[1] + dy
+        # Center the text vertically within the field area
+        field_height = placement_bbox[3] - placement_bbox[1]
+        y = placement_bbox[1] + (field_height * 0.6) + dy  # Position text in the middle-lower part of the field
         
         # Format text based on field type
         formatted_val = format_field_value(field_type, val)

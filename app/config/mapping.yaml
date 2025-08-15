@@ -12,7 +12,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: email
     acroform_names:
       - "email"
@@ -24,7 +24,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: phone
     acroform_names:
       - "phone"
@@ -38,7 +38,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: address
     acroform_names:
       - "address"
@@ -51,7 +51,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: ein
     acroform_names:
       - "ein"
@@ -63,7 +63,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: dob
     acroform_names:
       - "dob"
@@ -75,7 +75,7 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10
   - key: ssn
     acroform_names:
       - "ssn"
@@ -87,4 +87,4 @@ fields:
       offset:
         dx: 10
         dy: 0
-      font_size: 11
+      font_size: 10

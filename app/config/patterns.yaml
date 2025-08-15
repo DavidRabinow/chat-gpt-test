@@ -26,6 +26,7 @@ labels:
     - "mailing address:"
     - "business address:"
     - "current address:"
+    - "physical address:"
   ein:
     - "ein:"
     - "employer identification number:"
