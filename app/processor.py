@@ -256,42 +256,27 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
     """
     label_x0, label_y0, label_x1, label_y1 = label_bbox
     
-    # Define search area after the label with more precise boundaries
+    # Define search area after the label
     search_x0 = label_x1 + 5  # Start 5 points after label
-    search_x1 = min(label_x1 + 150, page_width)  # Search up to 150 points for more precise placement
-    search_y0 = label_y0 - 2  # Slightly above label
-    search_y1 = label_y1 + 2  # Slightly below label
+    search_x1 = min(label_x1 + 200, page_width)  # Search up to 200 points or page width
+    search_y0 = label_y0 - 5  # Slightly above label
+    search_y1 = label_y1 + 5  # Slightly below label
     
     # Get text in the search area
     search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
     text_in_area = page.get_text("text", clip=search_rect).strip()
     
     # Check if area is mostly blank or contains placeholder text
-    # Also check for common placeholder patterns that we should replace
-    placeholder_patterns = ['( )', '___', '...', '/ /', 'if different than above', 'Phone Number:', 'Address:', 'Date of Birth:', 'SSN/FEIN:']
-    has_placeholder = any(pattern in text_in_area for pattern in placeholder_patterns)
-    
-    # Check for existing content that should not be replaced
-    # Only check for actual email addresses (with @) and phone numbers
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-    phone_patterns = ['\\(\\d{3}\\) \\d{3}-\\d{4}', '\\d{3}-\\d{3}-\\d{4}', '\\d{10}', '\\d{11}']
-    
-    has_existing_email = re.search(email_pattern, text_in_area)
-    has_existing_phone = any(re.search(pattern, text_in_area) for pattern in phone_patterns)
-    
-    # Consider it blank if it has very little text or only placeholders
-    # But don't fill if there's already an email or phone number
-    # Be more lenient with text length for better field detection
-    is_blank = (len(text_in_area) < 60 or has_placeholder) and not has_existing_email and not has_existing_phone
+    is_blank = len(text_in_area) < 50  # Allow more text, including placeholders
     
     if is_blank:
         # Calculate placement position with better field boundaries
-        placement_x = label_x1 + 30  # 30 points after label for better spacing
-        # Create a larger field area for better input positioning
-        field_height = max(label_y1 - label_y0, 20)  # Taller field height for better spacing
-        placement_y = label_y0 - 4  # Start further above label baseline
+        placement_x = label_x1 + 10  # 10 points after label
+        # Create a proper field area that's slightly taller than the label
+        field_height = max(label_y1 - label_y0, 12)  # Minimum 12 points height
+        placement_y = label_y0 - 2  # Start slightly above label baseline
         placement_width = search_x1 - placement_x
-        placement_height = field_height + 8  # More padding for better alignment
+        placement_height = field_height + 4  # Add some padding
         
         placement_bbox = [placement_x, placement_y, placement_x + placement_width, placement_y + placement_height]
         logger.debug(f"Blank space detected after label at {label_bbox}, placement at {placement_bbox}")
@@ -336,24 +321,6 @@ def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> 
                 if field_type in values and values[field_type]:
                     # Check for blank space after the label
                     is_blank, placement_bbox = detect_blank_space_after_label(page, [x0, y0, x1, y1], page_width)
-                    
-                    # Additional check: don't fill if there's already substantial content
-                    if is_blank and placement_bbox:
-                        # Check the placement area for existing content
-                        check_rect = fitz.Rect(placement_bbox[0], placement_bbox[1], placement_bbox[2], placement_bbox[3])
-                        existing_text = page.get_text("text", clip=check_rect).strip()
-                        
-                        # Skip if there's already an email or phone number
-                        # But allow filling if there's just text like "if different than above"
-                        phone_patterns = ['\\(\\d{3}\\) \\d{3}-\\d{4}', '\\d{3}-\\d{3}-\\d{4}', '\\d{10}', '\\d{11}']
-                        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-                        
-                        has_phone = any(re.search(pattern, existing_text) for pattern in phone_patterns)
-                        has_email = re.search(email_pattern, existing_text)
-                        
-                        if has_phone or has_email:
-                            logger.debug(f"Skipping field '{text}' - already has email/phone: '{existing_text[:30]}...'")
-                            continue
                     
                     if is_blank:
                         hits[field_type].append({
@@ -415,33 +382,11 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         page = doc[best_match['page']]
         placement_bbox = best_match['placement_bbox']
         
-        # Calculate text position within the placement area with field-specific alignment
-        x = placement_bbox[0] + dx + 8  # Add extra 8 points to move text further right
-        
-        # Field-specific positioning adjustments for better alignment
-        if field_type == "phone":
-            # Phone numbers should align with the baseline of the label
-            y = placement_bbox[1] + (placement_bbox[3] - placement_bbox[1]) * 0.15 + dy
-        elif field_type == "name":
-            # Names should be positioned after "above:" if that text is present
-            check_rect = fitz.Rect(placement_bbox[0], placement_bbox[1], placement_bbox[2], placement_bbox[3])
-            existing_text = page.get_text("text", clip=check_rect).strip()
-            if "above:" in existing_text:
-                # If "above:" is present, position the name much lower to avoid overlap
-                y = placement_bbox[1] + (placement_bbox[3] - placement_bbox[1]) * 0.95 + dy
-            else:
-                # If no "above:" text, position normally
-                y = placement_bbox[1] + (placement_bbox[3] - placement_bbox[1]) * 0.25 + dy
-        elif field_type == "email":
-            # Email addresses should align with the label baseline
-            y = placement_bbox[1] + (placement_bbox[3] - placement_bbox[1]) * 0.25 + dy
-        elif field_type == "address":
-            # Addresses should align with the label baseline
-            y = placement_bbox[1] + (placement_bbox[3] - placement_bbox[1]) * 0.25 + dy
-        else:
-            # Default positioning in the middle
-            field_height = placement_bbox[3] - placement_bbox[1]
-            y = placement_bbox[1] + (field_height * 0.25) + dy
+        # Calculate text position within the placement area with better alignment
+        x = placement_bbox[0] + dx
+        # Center the text vertically within the field area
+        field_height = placement_bbox[3] - placement_bbox[1]
+        y = placement_bbox[1] + (field_height * 0.6) + dy  # Position text in the middle-lower part of the field
         
         # Format text based on field type
         formatted_val = format_field_value(field_type, val)
