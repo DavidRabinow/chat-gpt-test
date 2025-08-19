@@ -30,6 +30,17 @@ FIELD_VALIDATION = {
     "dob": r'^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$'
 }
 
+# Patterns to detect if fields are already filled
+FIELD_DETECTION_PATTERNS = {
+    "email": r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Contains @ symbol and valid email format
+    "phone": r'[\d\s\-\(\)\.]{7,}',  # Contains at least 7 digits/phone characters
+    "ssn": r'\d{2,3}-?\d{2}-?\d{4}',  # SSN pattern (2-3 digits, 2 digits, 4 digits)
+    "ein": r'\d{2}-?\d{7}',  # EIN pattern
+    "dob": r'\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}',  # Date pattern
+    "name": r'[A-Za-z]{2,}',  # At least 2 letters
+    "address": r'[A-Za-z0-9\s,\.]{10,}'  # At least 10 characters with letters/numbers
+}
+
 # Confidence thresholds
 MIN_CONFIDENCE = 80  # Minimum fuzzy match confidence
 MIN_FIELD_CONFIDENCE = 70  # Minimum confidence for field detection
@@ -141,11 +152,19 @@ def fill_acroform(pdf_path: Path, out_path: Path, values: Dict[str,str], field_a
             continue
         for name in (fields.keys() if fields else []):
             if name in aliases:
+                # Check if the field already has a value
+                current_value = fields[name].get('/V', '') if fields[name] else ''
+                if current_value:
+                    # Check if the current value appears to be valid data
+                    if is_acroform_field_already_filled(logical_key, current_value):
+                        logger.info(f"AcroForm field '{name}' already contains valid data: '{current_value}', skipping")
+                        continue
+                
                 update_map[name] = val
                 logger.info(f"AcroForm: Filling '{name}' with '{logical_key}' value")
     
     if not update_map:
-        logger.warning("No AcroForm fields matched")
+        logger.warning("No AcroForm fields matched or all fields already filled")
         return False
     
     writer.update_page_form_field_values(writer.pages[0], update_map)
@@ -294,6 +313,78 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
     logger.debug(f"No blank space detected after label at {label_bbox} in any position")
     return False, []
 
+def is_field_already_filled(page, field_type: str, placement_bbox: List[float]) -> bool:
+    """
+    Check if a field area already contains valid data for the given field type.
+    Returns True if the field appears to be already filled with valid data.
+    """
+    if field_type not in FIELD_DETECTION_PATTERNS:
+        return False
+    
+    # Get text in the field area
+    search_rect = fitz.Rect(placement_bbox[0], placement_bbox[1], placement_bbox[2], placement_bbox[3])
+    text_in_area = page.get_text("text", clip=search_rect).strip()
+    
+    if not text_in_area:
+        return False
+    
+    # Check if the text matches the expected pattern for this field type
+    pattern = FIELD_DETECTION_PATTERNS[field_type]
+    match = re.search(pattern, text_in_area, re.IGNORECASE)
+    
+    if match:
+        logger.info(f"Field '{field_type}' already contains valid data: '{text_in_area.strip()}'")
+        return True
+    
+    # Special case for email - check if it contains @ symbol
+    if field_type == "email" and "@" in text_in_area:
+        logger.info(f"Email field already contains @ symbol: '{text_in_area.strip()}'")
+        return True
+    
+    # Special case for phone - check if it contains enough digits
+    if field_type == "phone":
+        digits = re.findall(r'\d', text_in_area)
+        if len(digits) >= 7:  # At least 7 digits for a phone number
+            logger.info(f"Phone field already contains digits: '{text_in_area.strip()}'")
+            return True
+    
+    return False
+
+def is_acroform_field_already_filled(field_type: str, current_value: str) -> bool:
+    """
+    Check if an AcroForm field already contains valid data for the given field type.
+    Returns True if the field appears to be already filled with valid data.
+    """
+    if not current_value or not current_value.strip():
+        return False
+    
+    current_value = current_value.strip()
+    
+    if field_type not in FIELD_DETECTION_PATTERNS:
+        return False
+    
+    # Check if the text matches the expected pattern for this field type
+    pattern = FIELD_DETECTION_PATTERNS[field_type]
+    match = re.search(pattern, current_value, re.IGNORECASE)
+    
+    if match:
+        logger.info(f"AcroForm field '{field_type}' already contains valid data: '{current_value}'")
+        return True
+    
+    # Special case for email - check if it contains @ symbol
+    if field_type == "email" and "@" in current_value:
+        logger.info(f"AcroForm email field already contains @ symbol: '{current_value}'")
+        return True
+    
+    # Special case for phone - check if it contains enough digits
+    if field_type == "phone":
+        digits = re.findall(r'\d', current_value)
+        if len(digits) >= 7:  # At least 7 digits for a phone number
+            logger.info(f"AcroForm phone field already contains digits: '{current_value}'")
+            return True
+    
+    return False
+
 def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> Dict[str, List]:
     """
     Enhanced label search with field type classification, confidence scoring, and blank space detection.
@@ -332,6 +423,11 @@ def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> 
                     is_blank, placement_bbox = detect_blank_space_after_label(page, [x0, y0, x1, y1], page_width)
                     
                     if is_blank:
+                        # Check if the field is already filled
+                        if is_field_already_filled(page, field_type, placement_bbox):
+                            logger.debug(f"Field '{field_type}' already filled, skipping overlay.")
+                            continue
+
                         hits[field_type].append({
                             'page': p, 
                             'label_bbox': [x0, y0, x1, y1],
@@ -377,6 +473,14 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         # Use the highest confidence match
         best_match = max(matches, key=lambda x: x.get('confidence', 0))
         
+        page = doc[best_match['page']]
+        placement_bbox = best_match['placement_bbox']
+        
+        # Check if the field is already filled before attempting to fill it
+        if is_field_already_filled(page, field_type, placement_bbox):
+            logger.info(f"Field '{field_type}' already contains valid data, skipping overlay")
+            continue
+        
         logger.info(f"Filling '{field_type}' with value '{val}' at position {best_match['placement_bbox']}")
         
         # Get positioning from mapping or use defaults
@@ -387,9 +491,6 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
             size = entry['write'].get('font_size', 10)  # Slightly smaller font for better fit
         else:
             dx, dy, size = 50, 0, 10  # Increased default dx from 10 to 50 points
-        
-        page = doc[best_match['page']]
-        placement_bbox = best_match['placement_bbox']
         
         # Calculate text position within the placement area with better alignment
         x = placement_bbox[0] + dx

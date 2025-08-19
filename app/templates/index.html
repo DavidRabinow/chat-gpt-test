@@ -160,6 +160,7 @@
       <p class="hint">
         Upload a .zip containing PDFs. Enter values to fill wherever the
         document has label anchors (e.g., "name:", "email:", etc.).
+        <strong>Smart Detection:</strong> The system will automatically detect if fields are already filled (e.g., email with @ symbol, phone with digits) and skip them to preserve existing data.
       </p>
       <form method="post" action="/process" enctype="multipart/form-data">
         <div class="section">
@@ -206,6 +207,16 @@
             for any purpose other than to process your claim and fulfill the
             requirements of the Illinois Comptroller to issue a check for
             payment.
+          </div>
+          
+          <div class="privacy-notice" style="background: #dbeafe; border-left: 4px solid #3b82f6;">
+            <strong>SMART FIELD DETECTION:</strong> The system intelligently detects if fields are already filled:
+            <ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;">
+              <li><strong>Email:</strong> Skips if @ symbol is detected</li>
+              <li><strong>Phone:</strong> Skips if 7+ digits are found</li>
+              <li><strong>SSN/EIN:</strong> Skips if proper format is detected</li>
+              <li><strong>Address:</strong> Skips if substantial text is present</li>
+            </ul>
           </div>
         </div>
 
