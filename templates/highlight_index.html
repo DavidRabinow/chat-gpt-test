@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document Highlighter</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+          Arial, sans-serif;
+        margin: 2rem;
+        background: #f5f5f5;
+      }
+      .card {
+        max-width: 900px;
+        margin: auto;
+        padding: 2rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #1f2937;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .hint {
+        color: #6b7280;
+        font-size: 0.9rem;
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+      .flash {
+        background: #fef3c7;
+        color: #92400e;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border: 1px solid #fbbf24;
+      }
+      .section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f9fafb;
+      }
+      .section h2 {
+        margin-top: 0;
+        color: #374151;
+        font-size: 1.2rem;
+        margin-bottom: 1rem;
+      }
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .checkbox-item:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
+      }
+      .checkbox-item input[type="checkbox"] {
+        margin-right: 0.5rem;
+        transform: scale(1.1);
+      }
+      .checkbox-item label {
+        margin: 0;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #374151;
+      }
+      .signature-section {
+        background: #fef3c7;
+        border: 2px solid #fbbf24;
+        margin-bottom: 1.5rem;
+      }
+      .signature-section h2 {
+        color: #92400e;
+      }
+      .signature-section .checkbox-item {
+        background: #fef7ed;
+        border-color: #fbbf24;
+      }
+      .signature-section .checkbox-item:hover {
+        background: #fed7aa;
+      }
+      .custom-words {
+        margin-top: 1rem;
+      }
+      .custom-words label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      .custom-words textarea {
+        width: 100%;
+        min-height: 100px;
+        padding: 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-family: inherit;
+        resize: vertical;
+      }
+      .custom-words .hint {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 0.5rem;
+        text-align: left;
+      }
+      .file-upload {
+        margin-top: 2rem;
+      }
+      .file-upload label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      input[type="file"] {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        background: #f9fafb;
+        cursor: pointer;
+      }
+      input[type="file"]:hover {
+        border-color: #9ca3af;
+        background: #f3f4f6;
+      }
+      button {
+        width: 100%;
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border: 0;
+        border-radius: 10px;
+        background: #3b82f6;
+        color: white;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      .stats {
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+      }
+      .stats h3 {
+        margin: 0 0 0.5rem 0;
+        color: #065f46;
+        font-size: 1rem;
+      }
+      .stats p {
+        margin: 0;
+        color: #047857;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      {% with messages = get_flashed_messages() %} {% if messages %}
+      <div class="flash">{{ messages[0] }}</div>
+      {% endif %} {% endwith %}
+
+      <h1>📄 Document Highlighter</h1>
+      <p class="hint">
+        Select words and phrases to highlight in your PDF documents. Upload a
+        ZIP file containing PDFs and get back highlighted versions.
+      </p>
+
+      <form method="post" action="/highlight" enctype="multipart/form-data">
+        <div class="section signature-section">
+          <h2>✍️ Signature Fields</h2>
+          <p class="hint" style="text-align: left; margin-bottom: 1rem">
+            Check these signature-related fields that are commonly required:
+          </p>
+
+          <div class="checkbox-grid">
+            {% for word in common_highlights %}
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="word_{{ loop.index }}"
+                name="highlight_words"
+                value="{{ word }}"
+              />
+              <label for="word_{{ loop.index }}">{{ word }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>✏️ Custom Words/Phrases</h2>
+          <div class="custom-words">
+            <label for="custom_words">Add Custom Words/Phrases:</label>
+            <textarea
+              id="custom_words"
+              name="custom_words"
+              placeholder="Enter additional words or phrases to highlight, separated by commas or new lines.&#10;Example:&#10;DAVID RABINOW&#10;BLUE STAR ENERGY&#10;363 WEST ERIE STREET"
+            ></textarea>
+            <p class="hint">
+              Separate multiple words/phrases with commas, semicolons, or new
+              lines.
+            </p>
+          </div>
+        </div>
+
+        <div class="file-upload">
+          <label for="zipfile">📁 Upload ZIP File with PDFs:</label>
+          <input
+            type="file"
+            id="zipfile"
+            name="zipfile"
+            accept=".zip"
+            required
+          />
+          <p class="hint" style="text-align: left; margin-top: 0.5rem">
+            Upload a ZIP file containing the PDF documents you want to
+            highlight.
+          </p>
+        </div>
+
+        <button type="submit">✨ Highlight Documents & Download</button>
+      </form>
+
+      <div class="stats">
+        <h3>📊 How it works:</h3>
+        <p>
+          • Select from signature fields or add your own custom words/phrases<br />
+          • Upload a ZIP file containing PDF documents<br />
+          • The system will highlight all matching words/phrases<br />
+          • Download the highlighted documents as a new ZIP file
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // Add some interactivity
+      document.addEventListener("DOMContentLoaded", function () {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        const customTextarea = document.getElementById("custom_words");
+
+        // Update stats when selections change
+        function updateStats() {
+          const selectedCount = document.querySelectorAll(
+            'input[type="checkbox"]:checked'
+          ).length;
+          const customWords = customTextarea.value
+            .split(/[,;\n]/)
+            .filter((word) => word.trim()).length;
+          const total = selectedCount + customWords;
+
+          // You could add a counter display here if needed
+        }
+
+        checkboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", updateStats);
+        });
+
+        customTextarea.addEventListener("input", updateStats);
+      });
+    </script>
+  </body>
+</html>

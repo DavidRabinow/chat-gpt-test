@@ -1,18 +1,22 @@
 import io
 import zipfile
-import re
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
-from processor import process_zip
+import re
+import tempfile
 
 app = Flask(__name__)
-app.secret_key = "dev-secret"
+app.secret_key = "highlight-secret"
 
 # Common words/phrases that might need highlighting
 COMMON_HIGHLIGHTS = [
-    # Signature-related fields - focused on exact matches
-    "Signature of Claimant",
-    "Signature of Notary", 
-    "Notary Signature"
+    # Signature-related fields
+    "Signature of Claimant", "Claimant Signature", "Claimant's Signature",
+    "Signature of Notary", "Notary Public Signature", "Notary Signature",
+    "Notary Public", "Notary", "Notarized", "Notarization",
+    "Witness Signature", "Witness", "Witnessed",
+    "Authorized Signature", "Authorized Signer", "Authorized Representative",
+    "Legal Signature", "Legal Representative", "Legal Guardian",
+    "Power of Attorney", "POA", "Attorney Signature"
 ]
 
 def highlight_pdf(pdf_bytes, highlight_words):
@@ -33,24 +37,18 @@ def highlight_pdf(pdf_bytes, highlight_words):
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 
-                # Search for each word on the page with exact matching
+                # Search for each word on the page
                 for word in highlight_words:
-                    # First try exact case-sensitive search
-                    text_instances = page.search_for(word, flags=0)  # No flags = case sensitive
-                    
-                    # If no exact matches found, try case-insensitive
-                    if not text_instances:
-                        text_instances = page.search_for(word, flags=fitz.TEXTFLAGS_IGNORECASE)
+                    # Search for the word (case insensitive)
+                    text_instances = page.search_for(word, flags=fitz.TEXTFLAGS_IGNORECASE)
                     
                     # Highlight each instance found
                     for inst in text_instances:
                         # Create a highlight annotation
                         highlight = page.add_highlight_annot(inst)
                         highlight.set_colors(stroke=[1, 1, 0])  # Yellow
-                        highlight.set_opacity(0.4)  # More visible
+                        highlight.set_opacity(0.3)  # Semi-transparent
                         highlight.update()
-                        
-                        print(f"Highlighted '{word}' on page {page_num + 1}")
             
             # Save the highlighted PDF
             output_stream = io.BytesIO()
@@ -75,27 +73,9 @@ def highlight_pdf(pdf_bytes, highlight_words):
                 
                 # For each word to highlight, create a simple text-based annotation
                 for word in highlight_words:
-                    # Check for exact matches first (case sensitive)
-                    if word in text:
-                        print(f"Found exact match for '{word}' on page {page_num + 1}")
+                    if word.lower() in text.lower():
                         # Create a simple highlight annotation
-                        highlight_annotation = {
-                            '/Type': '/Annot',
-                            '/Subtype': '/Highlight',
-                            '/Rect': [50, 750 - (page_num * 20), 200, 770 - (page_num * 20)],
-                            '/F': 4,
-                            '/C': [1, 1, 0],  # Yellow
-                            '/T': 'Highlight',
-                            '/Contents': f'Found: {word}'
-                        }
-                        
-                        if '/Annots' not in page:
-                            page['/Annots'] = []
-                        page['/Annots'].append(highlight_annotation)
-                    # Also check case-insensitive
-                    elif word.lower() in text.lower():
-                        print(f"Found case-insensitive match for '{word}' on page {page_num + 1}")
-                        # Create a simple highlight annotation
+                        # This is a basic fallback - won't be as precise as PyMuPDF
                         highlight_annotation = {
                             '/Type': '/Annot',
                             '/Subtype': '/Highlight',
@@ -147,49 +127,7 @@ def process_highlight_zip(zip_bytes, highlight_words):
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", common_highlights=COMMON_HIGHLIGHTS)
-
-@app.route("/process", methods=["POST"])
-def process():
-    # Claimant Information
-    name_different = request.form.get("name_different","").strip()
-    daytime_phone = request.form.get("daytime_phone","").strip()
-    current_address = request.form.get("current_address","").strip()
-    email = request.form.get("email","").strip()
-    dob = request.form.get("dob","").strip()
-    ssn_fein = request.form.get("ssn_fein","").strip()
-
-    f = request.files.get("zipfile")
-    if not f or not f.filename.lower().endswith(".zip"):
-        flash("Please upload a .zip file containing PDFs.")
-        return redirect(url_for("index"))
-
-    zip_bytes = f.read()
-    values = {
-        # Claimant Information
-        "name_different": name_different,
-        "daytime_phone": daytime_phone,
-        "current_address": current_address,
-        "email": email,
-        "dob": dob,
-        "ssn_fein": ssn_fein,
-        
-        # Legacy field names for backward compatibility
-        "name": name_different,
-        "phone": daytime_phone,
-        "address": current_address,
-        "ein": ssn_fein,
-        "ssn": ssn_fein
-    }
-
-    out_zip = process_zip(zip_bytes, values)
-
-    return send_file(
-        io.BytesIO(out_zip),
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name="processed_pdfs.zip"
-    )
+    return render_template("highlight_index.html", common_highlights=COMMON_HIGHLIGHTS)
 
 @app.route("/highlight", methods=["POST"])
 def highlight():
@@ -208,7 +146,7 @@ def highlight():
         flash("Please select at least one word to highlight.")
         return redirect(url_for("index"))
     
-    f = request.files.get("highlight_zipfile")
+    f = request.files.get("zipfile")
     if not f or not f.filename.lower().endswith(".zip"):
         flash("Please upload a .zip file containing PDFs.")
         return redirect(url_for("index"))
@@ -229,5 +167,4 @@ def highlight():
         return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
-
+    app.run(host="0.0.0.0", port=5001, debug=True)

@@ -11,7 +11,7 @@
         margin: 2rem;
       }
       .card {
-        max-width: 640px;
+        max-width: 800px;
         margin: auto;
         padding: 1.5rem;
         border: 1px solid #e5e7eb;
@@ -61,6 +61,94 @@
       .field-group label {
         margin-top: 0;
       }
+      .section {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f9fafb;
+      }
+      .section h2 {
+        margin-top: 0;
+        color: #374151;
+        font-size: 1.1rem;
+      }
+      .privacy-notice {
+        background: #f3f4f6;
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin: 1rem 0;
+        font-size: 0.9rem;
+        color: #4b5563;
+      }
+      .highlight-section {
+        background: #fef3c7;
+        border: 2px solid #fbbf24;
+        margin-top: 2rem;
+      }
+      .highlight-section h2 {
+        color: #92400e;
+      }
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        background: white;
+        border: 1px solid #fbbf24;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .checkbox-item:hover {
+        background: #fed7aa;
+      }
+      .checkbox-item input[type="checkbox"] {
+        margin-right: 0.5rem;
+        transform: scale(1.1);
+      }
+      .checkbox-item label {
+        margin: 0;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #374151;
+      }
+      .custom-words {
+        margin-top: 1rem;
+      }
+      .custom-words label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      .custom-words textarea {
+        width: 100%;
+        min-height: 80px;
+        padding: 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-family: inherit;
+        resize: vertical;
+      }
+      .custom-words .hint {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 0.5rem;
+        text-align: left;
+      }
+      .highlight-button {
+        background: #3b82f6;
+        margin-top: 1rem;
+      }
+      .highlight-button:hover {
+        background: #2563eb;
+      }
     </style>
   </head>
   <body>
@@ -74,38 +162,50 @@
         document has label anchors (e.g., "name:", "email:", etc.).
       </p>
       <form method="post" action="/process" enctype="multipart/form-data">
-        <label>Name</label>
-        <input type="text" name="name" placeholder="John Doe" />
+        <div class="section">
+          <h2>A. Claimant Information</h2>
 
-        <label>Email</label>
-        <input type="email" name="email" placeholder="john@example.com" />
+          <label>Name if different than above</label>
+          <input
+            type="text"
+            name="name_different"
+            placeholder="DAVID RABINOW"
+          />
 
-        <div class="field-group">
-          <div>
-            <label>Phone</label>
-            <input type="text" name="phone" placeholder="555-123-4567" />
+          <label>Daytime Phone</label>
+          <input
+            type="text"
+            name="daytime_phone"
+            placeholder="(555) 123-4567"
+          />
+
+          <label>Current Address if different than above</label>
+          <input
+            type="text"
+            name="current_address"
+            placeholder="123 Main St, Springfield, IL"
+          />
+
+          <label>Email Address</label>
+          <input type="email" name="email" placeholder="drabinow2@gmail.com" />
+
+          <div class="field-group">
+            <div>
+              <label>Date of Birth</label>
+              <input type="text" name="dob" placeholder="MM/DD/YYYY" />
+            </div>
+            <div>
+              <label>SSN/FEIN</label>
+              <input type="text" name="ssn_fein" placeholder="123-45-6789" />
+            </div>
           </div>
-          <div>
-            <label>Date of Birth</label>
-            <input type="text" name="dob" placeholder="MM/DD/YYYY" />
-          </div>
-        </div>
 
-        <label>Address</label>
-        <input
-          type="text"
-          name="address"
-          placeholder="123 Main St, Springfield"
-        />
-
-        <div class="field-group">
-          <div>
-            <label>EIN / Tax ID</label>
-            <input type="text" name="ein" placeholder="12-3456789" />
-          </div>
-          <div>
-            <label>Social Security Number</label>
-            <input type="text" name="ssn" placeholder="123-45-6789" />
+          <div class="privacy-notice">
+            <strong>PRIVACY PROTECTION:</strong> Please be assured that the
+            Illinois State Treasurer does not use your social security number
+            for any purpose other than to process your claim and fulfill the
+            requirements of the Illinois Comptroller to issue a check for
+            payment.
           </div>
         </div>
 
@@ -114,6 +214,57 @@
 
         <button type="submit">Process & Download</button>
       </form>
+
+      <!-- Highlighting Section -->
+      <div class="section highlight-section">
+        <h2>✍️ Document Highlighting</h2>
+        <p class="hint" style="text-align: left; margin-bottom: 1rem">
+          Select words and phrases to highlight in your documents:
+        </p>
+
+        <form method="post" action="/highlight" enctype="multipart/form-data">
+          <div class="checkbox-grid">
+            {% for word in common_highlights %}
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="word_{{ loop.index }}"
+                name="highlight_words"
+                value="{{ word }}"
+              />
+              <label for="word_{{ loop.index }}">{{ word }}</label>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="custom-words">
+            <label for="custom_words">Add Custom Words/Phrases:</label>
+            <textarea
+              id="custom_words"
+              name="custom_words"
+              placeholder="Enter additional words or phrases to highlight, separated by commas or new lines.&#10;Example:&#10;DAVID RABINOW&#10;BLUE STAR ENERGY&#10;363 WEST ERIE STREET"
+            ></textarea>
+            <p class="hint">
+              Separate multiple words/phrases with commas, semicolons, or new
+              lines.
+            </p>
+          </div>
+
+          <label for="highlight_zipfile">📁 Upload ZIP File with PDFs:</label>
+          <input
+            type="file"
+            id="highlight_zipfile"
+            name="highlight_zipfile"
+            accept=".zip"
+            required
+          />
+
+          <button type="submit" class="highlight-button">
+            ✨ Highlight Documents & Download
+          </button>
+        </form>
+      </div>
+
       <p class="hint">
         Enhanced field detection with fuzzy matching and confidence scoring.
         Supports AcroForms and text-based field detection.

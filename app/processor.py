@@ -256,34 +256,43 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
     """
     label_x0, label_y0, label_x1, label_y1 = label_bbox
     
-    # Define search area after the label
-    search_x0 = label_x1 + 5  # Start 5 points after label
-    search_x1 = min(label_x1 + 200, page_width)  # Search up to 200 points or page width
-    search_y0 = label_y0 - 5  # Slightly above label
-    search_y1 = label_y1 + 5  # Slightly below label
+    # Try multiple positions to find a clear space
+    search_positions = [
+        (label_x1 + 50, 50),   # 50 points right, 50 points wide
+        (label_x1 + 100, 100), # 100 points right, 100 points wide
+        (label_x1 + 150, 150), # 150 points right, 150 points wide
+        (label_x1 + 200, 200), # 200 points right, 200 points wide
+        (label_x1 + 250, 250), # 250 points right, 250 points wide
+    ]
     
-    # Get text in the search area
-    search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
-    text_in_area = page.get_text("text", clip=search_rect).strip()
-    
-    # Check if area is mostly blank or contains placeholder text
-    is_blank = len(text_in_area) < 50  # Allow more text, including placeholders
-    
-    if is_blank:
-        # Calculate placement position with better field boundaries
-        placement_x = label_x1 + 10  # 10 points after label
-        # Create a proper field area that's slightly taller than the label
-        field_height = max(label_y1 - label_y0, 12)  # Minimum 12 points height
-        placement_y = label_y0 - 2  # Start slightly above label baseline
-        placement_width = search_x1 - placement_x
-        placement_height = field_height + 4  # Add some padding
+    for start_x, width in search_positions:
+        search_x0 = start_x
+        search_x1 = min(start_x + width, page_width)
+        search_y0 = label_y0 - 8  # Slightly above label
+        search_y1 = label_y1 + 8  # Slightly below label
         
-        placement_bbox = [placement_x, placement_y, placement_x + placement_width, placement_y + placement_height]
-        logger.debug(f"Blank space detected after label at {label_bbox}, placement at {placement_bbox}")
-        return True, placement_bbox
-    else:
-        logger.debug(f"No blank space detected after label at {label_bbox}, found text: '{text_in_area[:50]}...'")
-        return False, []
+        # Get text in the search area
+        search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
+        text_in_area = page.get_text("text", clip=search_rect).strip()
+        
+        # Check if area is mostly blank (very strict check)
+        is_blank = len(text_in_area) < 10  # Very strict - almost no text allowed
+        
+        if is_blank:
+            # Calculate placement position with better field boundaries
+            placement_x = start_x + 5  # 5 points into the blank area
+            # Create a proper field area that's slightly taller than the label
+            field_height = max(label_y1 - label_y0, 12)  # Minimum 12 points height
+            placement_y = label_y0 - 2  # Start slightly above label baseline
+            placement_width = width - 10  # Leave some margin
+            placement_height = field_height + 4  # Add some padding
+            
+            placement_bbox = [placement_x, placement_y, placement_x + placement_width, placement_y + placement_height]
+            logger.debug(f"Blank space detected after label at {label_bbox}, placement at {placement_bbox}")
+            return True, placement_bbox
+    
+    logger.debug(f"No blank space detected after label at {label_bbox} in any position")
+    return False, []
 
 def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> Dict[str, List]:
     """
@@ -373,11 +382,11 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         # Get positioning from mapping or use defaults
         entry = next((f for f in mapping.get('fields', []) if f['key'] == field_type), None)
         if entry:
-            dx = entry['write'].get('offset', {}).get('dx', 10)
+            dx = entry['write'].get('offset', {}).get('dx', 50)  # Increased from 10 to 50 points
             dy = entry['write'].get('offset', {}).get('dy', 0)
             size = entry['write'].get('font_size', 10)  # Slightly smaller font for better fit
         else:
-            dx, dy, size = 10, 0, 10  # Default to smaller font
+            dx, dy, size = 50, 0, 10  # Increased default dx from 10 to 50 points
         
         page = doc[best_match['page']]
         placement_bbox = best_match['placement_bbox']
@@ -391,11 +400,14 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         # Format text based on field type
         formatted_val = format_field_value(field_type, val)
         
-        # Insert text with proper formatting
-        page.insert_text((x, y), formatted_val, fontname='helv', fontsize=size)
+        # Find a safe position that doesn't overlap with existing content
+        safe_x, safe_y = find_safe_text_position(page, x, y, formatted_val, size)
+        
+        # Insert text with proper formatting at the safe position
+        page.insert_text((safe_x, safe_y), formatted_val, fontname='helv', fontsize=size)
         wrote = True
         
-        logger.info(f"Successfully inserted '{formatted_val}' for field '{field_type}'")
+        logger.info(f"Successfully inserted '{formatted_val}' for field '{field_type}' at safe position ({safe_x}, {safe_y})")
     
     if wrote:
         doc.save(str(out_path))
@@ -438,6 +450,52 @@ def format_field_value(field_type: str, value: str) -> str:
         return value.strip()
     
     return value
+
+def verify_text_placement(page, x: float, y: float, text: str, fontsize: float = 10) -> bool:
+    """
+    Verify that placing text at the given position won't overlap with existing content.
+    Returns True if placement is safe, False if overlap detected.
+    """
+    # Estimate text width (rough calculation)
+    char_width = fontsize * 0.6  # Approximate character width
+    text_width = len(text) * char_width
+    text_height = fontsize
+    
+    # Define the area where text would be placed
+    text_bbox = [x, y - text_height, x + text_width, y + 2]
+    
+    # Check for existing text in this area
+    search_rect = fitz.Rect(text_bbox[0], text_bbox[1], text_bbox[2], text_bbox[3])
+    existing_text = page.get_text("text", clip=search_rect).strip()
+    
+    # If there's existing text, placement is not safe
+    if existing_text:
+        logger.debug(f"Text placement blocked - existing text found: '{existing_text[:20]}...' at position ({x}, {y})")
+        return False
+    
+    return True
+
+def find_safe_text_position(page, base_x: float, base_y: float, text: str, fontsize: float = 10, max_attempts: int = 10) -> Tuple[float, float]:
+    """
+    Find a safe position to place text without overlapping existing content.
+    Returns (x, y) coordinates for safe placement.
+    """
+    char_width = fontsize * 0.6
+    text_width = len(text) * char_width
+    
+    # Try different horizontal offsets
+    for attempt in range(max_attempts):
+        offset_x = 50 + (attempt * 20)  # Start at 50, increment by 20 each attempt
+        test_x = base_x + offset_x
+        test_y = base_y
+        
+        if verify_text_placement(page, test_x, test_y, text, fontsize):
+            logger.debug(f"Safe text position found at ({test_x}, {test_y}) after {attempt + 1} attempts")
+            return test_x, test_y
+    
+    # If no safe position found, return a position far to the right
+    logger.warning(f"No safe position found for text '{text}', placing far to the right")
+    return base_x + 300, base_y
 
 # Keep the original functions for backward compatibility
 def search_labels_positions(pdf_path: Path, label_patterns):
