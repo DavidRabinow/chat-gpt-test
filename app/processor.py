@@ -288,11 +288,11 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
     # For phone numbers, try to place them closer to the label
     if field_type == "phone":
         search_positions = [
-            (label_x1 + 10, 80),   # 10 points right, 80 points wide - very close
-            (label_x1 + 20, 100),  # 20 points right, 100 points wide
-            (label_x1 + 30, 120),  # 30 points right, 120 points wide
-            (label_x1 + 50, 150),  # 50 points right, 150 points wide
-            (label_x1 + 100, 200), # 100 points right, 200 points wide
+            (label_x1 + 5, 80),    # 5 points right, 80 points wide - very close
+            (label_x1 + 10, 100),  # 10 points right, 100 points wide
+            (label_x1 + 15, 120),  # 15 points right, 120 points wide
+            (label_x1 + 20, 150),  # 20 points right, 150 points wide
+            (label_x1 + 30, 200),  # 30 points right, 200 points wide
         ]
     else:
         # For other fields, use the original positioning
@@ -314,8 +314,27 @@ def detect_blank_space_after_label(page, label_bbox: List[float], page_width: fl
         search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
         text_in_area = page.get_text("text", clip=search_rect).strip()
         
-        # Check if area is mostly blank (very strict check)
-        is_blank = len(text_in_area) < 10  # Very strict - almost no text allowed
+        # For phone fields, be more lenient with what we consider "blank"
+        if field_type == "phone":
+            # Check if the text is just placeholder characters or very short
+            # Remove common placeholder characters and check if it's essentially empty
+            cleaned_text = re.sub(r'[\(\)\-\s\.]', '', text_in_area)  # Remove parentheses, dashes, spaces, dots
+            is_blank = len(cleaned_text) < 5  # Allow for placeholder text like "( ) -"
+            
+            # Also check if it contains only placeholder patterns
+            placeholder_patterns = [
+                r'^[\(\)\-\s\.]+$',  # Only parentheses, dashes, spaces, dots
+                r'^\([^)]*\)[^0-9]*$',  # Parentheses with no digits
+                r'^[^0-9]*$',  # No digits at all
+            ]
+            
+            for pattern in placeholder_patterns:
+                if re.match(pattern, text_in_area):
+                    is_blank = True
+                    break
+        else:
+            # For other fields, use the original strict check
+            is_blank = len(text_in_area) < 10  # Very strict - almost no text allowed
         
         if is_blank:
             # Calculate placement position with better field boundaries
@@ -350,6 +369,21 @@ def is_field_already_filled(page, field_type: str, placement_bbox: List[float]) 
     
     # Enhanced phone number detection
     if field_type == "phone":
+        # First check if the text is just placeholder characters (not a real phone number)
+        cleaned_text = re.sub(r'[\(\)\-\s\.]', '', text_in_area)  # Remove parentheses, dashes, spaces, dots
+        if len(cleaned_text) < 5:  # If very little text after removing placeholders
+            # Check if it contains only placeholder patterns
+            placeholder_patterns = [
+                r'^[\(\)\-\s\.]+$',  # Only parentheses, dashes, spaces, dots
+                r'^\([^)]*\)[^0-9]*$',  # Parentheses with no digits
+                r'^[^0-9]*$',  # No digits at all
+            ]
+            
+            for pattern in placeholder_patterns:
+                if re.match(pattern, text_in_area):
+                    logger.debug(f"Phone field contains placeholder text: '{text_in_area.strip()}' - not filled")
+                    return False  # This is placeholder text, not a real phone number
+        
         # Check for specific phone number patterns
         for pattern in PHONE_DETECTION_PATTERNS:
             match = re.search(pattern, text_in_area)
@@ -440,6 +474,21 @@ def check_phone_after_label(page, label_bbox: List[float], page_width: float) ->
     
     if not text_in_area:
         return False
+    
+    # Check if the text is just placeholder characters (not a real phone number)
+    cleaned_text = re.sub(r'[\(\)\-\s\.]', '', text_in_area)  # Remove parentheses, dashes, spaces, dots
+    if len(cleaned_text) < 5:  # If very little text after removing placeholders
+        # Check if it contains only placeholder patterns
+        placeholder_patterns = [
+            r'^[\(\)\-\s\.]+$',  # Only parentheses, dashes, spaces, dots
+            r'^\([^)]*\)[^0-9]*$',  # Parentheses with no digits
+            r'^[^0-9]*$',  # No digits at all
+        ]
+        
+        for pattern in placeholder_patterns:
+            if re.match(pattern, text_in_area):
+                logger.debug(f"Placeholder text detected after phone label: '{text_in_area.strip()}' - not a real phone number")
+                return False  # This is placeholder text, not a real phone number
     
     # Check for specific phone number patterns
     for pattern in PHONE_DETECTION_PATTERNS:
@@ -565,7 +614,7 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         if entry:
             # For phone numbers, use smaller offset to place them closer to the label
             if field_type == "phone":
-                dx = entry['write'].get('offset', {}).get('dx', 15)  # Much closer for phone numbers
+                dx = entry['write'].get('offset', {}).get('dx', 5)  # Very close for phone numbers
             else:
                 dx = entry['write'].get('offset', {}).get('dx', 50)  # Standard offset for other fields
             dy = entry['write'].get('offset', {}).get('dy', 0)
@@ -573,7 +622,7 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         else:
             # For phone numbers, use smaller offset to place them closer to the label
             if field_type == "phone":
-                dx, dy, size = 15, 0, 10  # Much closer for phone numbers
+                dx, dy, size = 5, 0, 10  # Very close for phone numbers
             else:
                 dx, dy, size = 50, 0, 10  # Standard offset for other fields
         
@@ -673,7 +722,7 @@ def find_safe_text_position(page, base_x: float, base_y: float, text: str, fonts
     if field_type == "phone":
         # Try positions very close to the label first
         for attempt in range(max_attempts):
-            offset_x = 10 + (attempt * 10)  # Start at 10, increment by 10 each attempt
+            offset_x = 5 + (attempt * 5)  # Start at 5, increment by 5 each attempt - very close
             test_x = base_x + offset_x
             test_y = base_y
             
