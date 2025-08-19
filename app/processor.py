@@ -41,6 +41,16 @@ FIELD_DETECTION_PATTERNS = {
     "address": r'[A-Za-z0-9\s,\.]{10,}'  # At least 10 characters with letters/numbers
 }
 
+# Enhanced phone number detection patterns
+PHONE_DETECTION_PATTERNS = [
+    r'\(\d{3}\)\s*\d{3}-\d{4}',  # (123) 456-7890
+    r'\d{3}-\d{3}-\d{4}',        # 123-456-7890
+    r'\d{3}\.\d{3}\.\d{4}',      # 123.456.7890
+    r'\d{10}',                   # 1234567890
+    r'\d{3}\s\d{3}\s\d{4}',      # 123 456 7890
+    r'\(\d{3}\)\s\d{3}\s\d{4}',  # (123) 456 7890
+]
+
 # Confidence thresholds
 MIN_CONFIDENCE = 80  # Minimum fuzzy match confidence
 MIN_FIELD_CONFIDENCE = 70  # Minimum confidence for field detection
@@ -268,21 +278,31 @@ def is_likely_field_label(word_info: Tuple, page_width: float, page_height: floa
     
     return confidence >= MIN_FIELD_CONFIDENCE
 
-def detect_blank_space_after_label(page, label_bbox: List[float], page_width: float) -> Tuple[bool, List[float]]:
+def detect_blank_space_after_label(page, label_bbox: List[float], page_width: float, field_type: str = None) -> Tuple[bool, List[float]]:
     """
     Detect if there's blank space after a label where we can place text.
     Returns (is_blank, placement_bbox)
     """
     label_x0, label_y0, label_x1, label_y1 = label_bbox
     
-    # Try multiple positions to find a clear space
-    search_positions = [
-        (label_x1 + 50, 50),   # 50 points right, 50 points wide
-        (label_x1 + 100, 100), # 100 points right, 100 points wide
-        (label_x1 + 150, 150), # 150 points right, 150 points wide
-        (label_x1 + 200, 200), # 200 points right, 200 points wide
-        (label_x1 + 250, 250), # 250 points right, 250 points wide
-    ]
+    # For phone numbers, try to place them closer to the label
+    if field_type == "phone":
+        search_positions = [
+            (label_x1 + 10, 80),   # 10 points right, 80 points wide - very close
+            (label_x1 + 20, 100),  # 20 points right, 100 points wide
+            (label_x1 + 30, 120),  # 30 points right, 120 points wide
+            (label_x1 + 50, 150),  # 50 points right, 150 points wide
+            (label_x1 + 100, 200), # 100 points right, 200 points wide
+        ]
+    else:
+        # For other fields, use the original positioning
+        search_positions = [
+            (label_x1 + 50, 50),   # 50 points right, 50 points wide
+            (label_x1 + 100, 100), # 100 points right, 100 points wide
+            (label_x1 + 150, 150), # 150 points right, 150 points wide
+            (label_x1 + 200, 200), # 200 points right, 200 points wide
+            (label_x1 + 250, 250), # 250 points right, 250 points wide
+        ]
     
     for start_x, width in search_positions:
         search_x0 = start_x
@@ -328,6 +348,21 @@ def is_field_already_filled(page, field_type: str, placement_bbox: List[float]) 
     if not text_in_area:
         return False
     
+    # Enhanced phone number detection
+    if field_type == "phone":
+        # Check for specific phone number patterns
+        for pattern in PHONE_DETECTION_PATTERNS:
+            match = re.search(pattern, text_in_area)
+            if match:
+                logger.info(f"Phone field already contains valid phone number: '{text_in_area.strip()}'")
+                return True
+        
+        # Also check for general digit patterns (at least 7 digits)
+        digits = re.findall(r'\d', text_in_area)
+        if len(digits) >= 7:
+            logger.info(f"Phone field already contains digits: '{text_in_area.strip()}'")
+            return True
+    
     # Check if the text matches the expected pattern for this field type
     pattern = FIELD_DETECTION_PATTERNS[field_type]
     match = re.search(pattern, text_in_area, re.IGNORECASE)
@@ -340,13 +375,6 @@ def is_field_already_filled(page, field_type: str, placement_bbox: List[float]) 
     if field_type == "email" and "@" in text_in_area:
         logger.info(f"Email field already contains @ symbol: '{text_in_area.strip()}'")
         return True
-    
-    # Special case for phone - check if it contains enough digits
-    if field_type == "phone":
-        digits = re.findall(r'\d', text_in_area)
-        if len(digits) >= 7:  # At least 7 digits for a phone number
-            logger.info(f"Phone field already contains digits: '{text_in_area.strip()}'")
-            return True
     
     return False
 
@@ -363,6 +391,21 @@ def is_acroform_field_already_filled(field_type: str, current_value: str) -> boo
     if field_type not in FIELD_DETECTION_PATTERNS:
         return False
     
+    # Enhanced phone number detection for AcroForm fields
+    if field_type == "phone":
+        # Check for specific phone number patterns
+        for pattern in PHONE_DETECTION_PATTERNS:
+            match = re.search(pattern, current_value)
+            if match:
+                logger.info(f"AcroForm phone field already contains valid phone number: '{current_value}'")
+                return True
+        
+        # Also check for general digit patterns (at least 7 digits)
+        digits = re.findall(r'\d', current_value)
+        if len(digits) >= 7:
+            logger.info(f"AcroForm phone field already contains digits: '{current_value}'")
+            return True
+    
     # Check if the text matches the expected pattern for this field type
     pattern = FIELD_DETECTION_PATTERNS[field_type]
     match = re.search(pattern, current_value, re.IGNORECASE)
@@ -376,12 +419,40 @@ def is_acroform_field_already_filled(field_type: str, current_value: str) -> boo
         logger.info(f"AcroForm email field already contains @ symbol: '{current_value}'")
         return True
     
-    # Special case for phone - check if it contains enough digits
-    if field_type == "phone":
-        digits = re.findall(r'\d', current_value)
-        if len(digits) >= 7:  # At least 7 digits for a phone number
-            logger.info(f"AcroForm phone field already contains digits: '{current_value}'")
+    return False
+
+def check_phone_after_label(page, label_bbox: List[float], page_width: float) -> bool:
+    """
+    Specifically check if there's already a phone number in the immediate area after a phone label.
+    Returns True if a phone number is detected.
+    """
+    label_x0, label_y0, label_x1, label_y1 = label_bbox
+    
+    # Check the immediate area after the label (within 200 points)
+    search_x0 = label_x1 + 5  # Start 5 points after the label
+    search_x1 = min(label_x1 + 200, page_width)  # Check up to 200 points to the right
+    search_y0 = label_y0 - 10  # Slightly above the label
+    search_y1 = label_y1 + 10  # Slightly below the label
+    
+    # Get text in the search area
+    search_rect = fitz.Rect(search_x0, search_y0, search_x1, search_y1)
+    text_in_area = page.get_text("text", clip=search_rect).strip()
+    
+    if not text_in_area:
+        return False
+    
+    # Check for specific phone number patterns
+    for pattern in PHONE_DETECTION_PATTERNS:
+        match = re.search(pattern, text_in_area)
+        if match:
+            logger.info(f"Phone number detected after label: '{text_in_area.strip()}'")
             return True
+    
+    # Also check for general digit patterns (at least 7 digits)
+    digits = re.findall(r'\d', text_in_area)
+    if len(digits) >= 7:
+        logger.info(f"Digits detected after phone label: '{text_in_area.strip()}'")
+        return True
     
     return False
 
@@ -419,8 +490,14 @@ def search_labels_positions_enhanced(pdf_path: Path, values: Dict[str, str]) -> 
             if field_type and confidence >= MIN_CONFIDENCE:
                 # Check if we have a value for this field type
                 if field_type in values and values[field_type]:
+                    # For phone fields, first check if there's already a phone number after the label
+                    if field_type == "phone":
+                        if check_phone_after_label(page, [x0, y0, x1, y1], page_width):
+                            logger.info(f"Phone number already exists after label '{text}', skipping overlay.")
+                            continue
+                    
                     # Check for blank space after the label
-                    is_blank, placement_bbox = detect_blank_space_after_label(page, [x0, y0, x1, y1], page_width)
+                    is_blank, placement_bbox = detect_blank_space_after_label(page, [x0, y0, x1, y1], page_width, field_type)
                     
                     if is_blank:
                         # Check if the field is already filled
@@ -486,11 +563,19 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         # Get positioning from mapping or use defaults
         entry = next((f for f in mapping.get('fields', []) if f['key'] == field_type), None)
         if entry:
-            dx = entry['write'].get('offset', {}).get('dx', 50)  # Increased from 10 to 50 points
+            # For phone numbers, use smaller offset to place them closer to the label
+            if field_type == "phone":
+                dx = entry['write'].get('offset', {}).get('dx', 15)  # Much closer for phone numbers
+            else:
+                dx = entry['write'].get('offset', {}).get('dx', 50)  # Standard offset for other fields
             dy = entry['write'].get('offset', {}).get('dy', 0)
             size = entry['write'].get('font_size', 10)  # Slightly smaller font for better fit
         else:
-            dx, dy, size = 50, 0, 10  # Increased default dx from 10 to 50 points
+            # For phone numbers, use smaller offset to place them closer to the label
+            if field_type == "phone":
+                dx, dy, size = 15, 0, 10  # Much closer for phone numbers
+            else:
+                dx, dy, size = 50, 0, 10  # Standard offset for other fields
         
         # Calculate text position within the placement area with better alignment
         x = placement_bbox[0] + dx
@@ -502,7 +587,7 @@ def overlay_values_enhanced(pdf_path: Path, out_path: Path, anchors: Dict, value
         formatted_val = format_field_value(field_type, val)
         
         # Find a safe position that doesn't overlap with existing content
-        safe_x, safe_y = find_safe_text_position(page, x, y, formatted_val, size)
+        safe_x, safe_y = find_safe_text_position(page, x, y, formatted_val, size, field_type=field_type)
         
         # Insert text with proper formatting at the safe position
         page.insert_text((safe_x, safe_y), formatted_val, fontname='helv', fontsize=size)
@@ -576,7 +661,7 @@ def verify_text_placement(page, x: float, y: float, text: str, fontsize: float =
     
     return True
 
-def find_safe_text_position(page, base_x: float, base_y: float, text: str, fontsize: float = 10, max_attempts: int = 10) -> Tuple[float, float]:
+def find_safe_text_position(page, base_x: float, base_y: float, text: str, fontsize: float = 10, max_attempts: int = 10, field_type: str = None) -> Tuple[float, float]:
     """
     Find a safe position to place text without overlapping existing content.
     Returns (x, y) coordinates for safe placement.
@@ -584,15 +669,27 @@ def find_safe_text_position(page, base_x: float, base_y: float, text: str, fonts
     char_width = fontsize * 0.6
     text_width = len(text) * char_width
     
-    # Try different horizontal offsets
-    for attempt in range(max_attempts):
-        offset_x = 50 + (attempt * 20)  # Start at 50, increment by 20 each attempt
-        test_x = base_x + offset_x
-        test_y = base_y
-        
-        if verify_text_placement(page, test_x, test_y, text, fontsize):
-            logger.debug(f"Safe text position found at ({test_x}, {test_y}) after {attempt + 1} attempts")
-            return test_x, test_y
+    # For phone numbers, try positions closer to the base position
+    if field_type == "phone":
+        # Try positions very close to the label first
+        for attempt in range(max_attempts):
+            offset_x = 10 + (attempt * 10)  # Start at 10, increment by 10 each attempt
+            test_x = base_x + offset_x
+            test_y = base_y
+            
+            if verify_text_placement(page, test_x, test_y, text, fontsize):
+                logger.debug(f"Safe phone position found at ({test_x}, {test_y}) after {attempt + 1} attempts")
+                return test_x, test_y
+    else:
+        # For other fields, use the original logic
+        for attempt in range(max_attempts):
+            offset_x = 50 + (attempt * 20)  # Start at 50, increment by 20 each attempt
+            test_x = base_x + offset_x
+            test_y = base_y
+            
+            if verify_text_placement(page, test_x, test_y, text, fontsize):
+                logger.debug(f"Safe text position found at ({test_x}, {test_y}) after {attempt + 1} attempts")
+                return test_x, test_y
     
     # If no safe position found, return a position far to the right
     logger.warning(f"No safe position found for text '{text}', placing far to the right")
